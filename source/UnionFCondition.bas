@@ -2,7 +2,7 @@ Attribute VB_Name = "UnionFCondition"
 Option Explicit
 'Option Private Module
 
-Type TSaveInfo
+Private Type TSaveInfo
     NewAppliesTo As Range   'Äİ’è‚³‚¹‚éƒZƒ‹”ÍˆÍ
     Delete       As Boolean 'True:íœ‘ÎÛ
 End Type
