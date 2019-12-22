@@ -87,15 +87,23 @@ Private Sub UnionFormatConditions(ByRef objWorksheet As Worksheet)
             Call FConditions(i).Delete
         Else
             If Not (SaveArray(i).NewAppliesTo Is Nothing) Then
-                '念のため、A1,A2,A3 → A1:A3 とするおまじない(不要かも？)
-                Dim objWk As Range
-                Set objWk = SaveArray(i).NewAppliesTo
-                Set objWk = Application.Intersect(objWk, objWk)
-
                 '条件付き書式の統合
-                Call FConditions(i).ModifyAppliesToRange(objWk)
+                Call FConditions(i).ModifyAppliesToRange(SaveArray(i).NewAppliesTo)
             End If
         End If
+    Next
+
+    'A1,A2,A3 → A1:A3 のように領域を整理
+    Dim objWk As Range
+    Set FConditions = objWorksheet.Cells.FormatConditions
+    For i = FConditions.Count To 1 Step -1
+        With FConditions(i)
+            Set objWk = .AppliesTo
+            Set objWk = Application.Intersect(objWk, objWk)
+            If .AppliesTo.Areas.Count > objWk.Areas.Count Then
+                Call .ModifyAppliesToRange(objWk)
+            End If
+        End With
     Next
 End Sub
 
@@ -133,45 +141,55 @@ Private Function IsSameFormatCondition(ByRef F1 As Object, ByRef F2 As Object) A
     If Not (TypeOf F2 Is FormatCondition) Then
         Exit Function
     End If
-
-    Dim FCondition1 As FormatCondition
-    Dim FCondition2 As FormatCondition
-    Set FCondition1 = F1
-    Set FCondition2 = F2
-    
-    If FCondition1.Type <> FCondition2.Type Then
+    If F1.Type <> F2.Type Then
         Exit Function
     End If
     
-'    Select Case FCondition1.Type
-'        'セルの値、数式、文字列、期間 のみ判定対象とする
+'    Select Case F1.Type
+'        'セルの値、数式、文字列、期間 のみ判定対象とする　→　FormatConditionはすべて対象にする
 '        Case xlCellValue, xlExpression, xlTextString, xlTimePeriod
 '        Case Else
 '            Exit Function
 '    End Select
     
-    '条件が一致するか判定
+    If IsSameCondition(F1, F2) Then
+        IsSameFormatCondition = IsSameFormat(F1, F2)
+    End If
+End Function
+
+'*****************************************************************************
+'[概要] 条件が一致するか判定
+'[引数] 比較対象のFormatConditionオブジェクト
+'[戻値] True:一致
+'*****************************************************************************
+Private Function IsSameCondition(ByRef Condition1 As FormatCondition, ByRef Condition2 As FormatCondition) As Boolean
     Dim Operator(1 To 2)      As String '次の値に等しい、次の値の間etc
     Dim TextOperator(1 To 2)  As String 'Type=xlTextStringの時、次の値を含む、次の値で始まるetc
     Dim Text(1 To 2)          As String 'Type=xlTextStringの時の文字列
     Dim Formula1_R1C1(1 To 2) As String '数式をR1C1タイプで設定
     Dim Formula2_R1C1(1 To 2) As String '数式をR1C1タイプで設定
+
+    IsSameCondition = False
     
-    'タイプによっては直接判定すると例外となる項目があるため例外を抑制し変数に設定
+    'タイプによっては直接判定すると例外となる項目があるため例外を抑制して変数に設定
     On Error Resume Next
-    With FCondition1
+    With Condition1
         Operator(1) = .Operator
         TextOperator(1) = .TextOperator
         Text(1) = .Text
         Formula1_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
         Formula2_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+'        Formula1Ex_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'        Formula2Ex_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
     End With
-    With FCondition2
+    With Condition2
         Operator(2) = .Operator
         TextOperator(2) = .TextOperator
         Text(2) = .Text
         Formula1_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
         Formula2_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+'        Formula1Ex_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'        Formula2Ex_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
     End With
     On Error GoTo 0
     
@@ -191,22 +209,50 @@ Private Function IsSameFormatCondition(ByRef F1 As Object, ByRef F2 As Object) A
         Exit Function
     End If
     
+    IsSameCondition = True
     
-    '書式が一致するか判定
+'    '念のためF1が絶対参照、F2が相対参照なのでFormula_R1C1の中身が一致した時のために、
+'    '1つ右下のセルの相対参照の内容まで一致するか確認する →　不要
+'    On Error Resume Next
+'    With Condition1
+'        Formula1Ex_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'        Formula2Ex_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'    End With
+'    With Condition2
+'        Formula1Ex_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'        Formula2Ex_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
+'    End With
+'    On Error GoTo 0
+'    If Formula1Ex_R1C1(1) <> Formula1Ex_R1C1(2) Then
+'        Exit Function
+'    End If
+'    If Formula2Ex_R1C1(1) <> Formula2Ex_R1C1(2) Then
+'        Exit Function
+'    End If
+End Function
+
+'*****************************************************************************
+'[概要] 書式が一致するか判定
+'[引数] 比較対象のFormatConditionオブジェクト
+'[戻値] True:一致
+'*****************************************************************************
+Private Function IsSameFormat(ByRef Format1 As FormatCondition, ByRef Format2 As FormatCondition) As Boolean
     Dim FontBold(1 To 2)      As String 'フォント太字
     Dim FontColor(1 To 2)     As String 'フォント色
     Dim InteriorColor(1 To 2) As String '塗りつぶし色
     Dim NumberFormat(1 To 2)  As String '値の表示形式 例：#,##0
     
+    IsSameFormat = False
+    
     '場合によっては直接判定すると例外となる項目があることを考慮して例外を抑制し変数に設定
     On Error Resume Next
-    With FCondition1
+    With Format1
         FontBold(1) = .Font.Bold
         FontColor(1) = .Font.Color
         InteriorColor(1) = .Interior.Color
         NumberFormat(1) = .NumberFormat
     End With
-    With FCondition2
+    With Format2
         FontBold(2) = .Font.Bold
         FontColor(2) = .Font.Color
         InteriorColor(2) = .Interior.Color
@@ -227,6 +273,6 @@ Private Function IsSameFormatCondition(ByRef F1 As Object, ByRef F2 As Object) A
         Exit Function
     End If
     
-    IsSameFormatCondition = True
+    IsSameFormat = True
 End Function
 
