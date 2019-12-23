@@ -8,44 +8,10 @@ Private Type TSaveInfo
 End Type
 
 '*****************************************************************************
-'[概要] Debug用のセル関数
-'[引数] objCell:条件付き書式の設定されたセル、lngNum:FormatConditionsの何番目？
-'[戻値] 例：Type:1 Operator:4 TextOperator:# Text:# Formula1:=0 Formula2:#  Formula1:=0 Formula2:# AppliesTo:A1:A20
+'[概要] アクティブシートの条件付き書式を統合する
+'[引数] なし
+'[戻値] なし
 '*****************************************************************************
-Public Function GetFConditionStr(objCell As Range, lngNum As Long) As String
-    Dim objFCondition As Object
-    Set objFCondition = objCell.FormatConditions(lngNum)
-        
-    Dim s(1 To 11)
-    Dim i As Long
-    For i = 1 To UBound(s)
-        s(i) = "#" 'エラーの時
-    Next
-    
-    On Error Resume Next
-    With objFCondition
-        s(1) = .Type
-        s(2) = TypeName(objFCondition)
-        s(3) = .Operator
-        s(4) = .TextOperator
-        s(5) = .Text
-        s(6) = .Formula1
-        s(7) = .Formula2
-        s(8) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-        s(9) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-        s(10) = .AppliesTo.AddressLocal(False, False)
-        s(11) = GetTopLeftCell(.AppliesTo).AddressLocal(False, False)
-    End With
-    On Error GoTo 0
-    
-    Dim strMsg As String
-    strMsg = "Type:{1} TypeName:{2} Operator:{3} TextOperator:{4} Text:{5} Formula1:{6} Formula2:{7}  Formula1:{8} Formula2:{9} AppliesTo:{10} TopLeftCell:{11}"
-    For i = 1 To UBound(s)
-        strMsg = Replace(strMsg, "{" & i & "}", s(i))
-    Next
-    GetFConditionStr = strMsg
-End Function
-
 Public Sub FormatConditions()
     Call UnionFormatConditions(ActiveSheet)
 End Sub
@@ -95,12 +61,16 @@ Private Sub UnionFormatConditions(ByRef objWorksheet As Worksheet)
 
     'A1,A2,A3 → A1:A3 のように領域を整理
     Dim objWk As Range
+    'FormatConditionsを圧縮したため再設定
     Set FConditions = objWorksheet.Cells.FormatConditions
     For i = FConditions.Count To 1 Step -1
         With FConditions(i)
-            Set objWk = .AppliesTo
-            Set objWk = Application.Intersect(objWk, objWk)
-            If .AppliesTo.Areas.Count > objWk.Areas.Count Then
+            If .AppliesTo.Areas.Count > 1 Then
+                Set objWk = .AppliesTo
+                'A1,A2,A3 → A1:A3 のように領域を整理
+                Set objWk = Application.Intersect(objWk, objWk)
+                '領域が左上から並ぶようにソートする 例:E:F,B:B → B:B,E:F
+                Set objWk = SortAreas(objWk)
                 Call .ModifyAppliesToRange(objWk)
             End If
         End With
@@ -141,10 +111,7 @@ Private Function IsSameFormatCondition(ByRef F1 As Object, ByRef F2 As Object) A
     If Not (TypeOf F2 Is FormatCondition) Then
         Exit Function
     End If
-    If F1.Type <> F2.Type Then
-        Exit Function
-    End If
-    
+
 '    Select Case F1.Type
 '        'セルの値、数式、文字列、期間 のみ判定対象とする　→　FormatConditionはすべて対象にする
 '        Case xlCellValue, xlExpression, xlTextString, xlTimePeriod
@@ -162,7 +129,7 @@ End Function
 '[引数] 比較対象のFormatConditionオブジェクト
 '[戻値] True:一致
 '*****************************************************************************
-Private Function IsSameCondition(ByRef Condition1 As FormatCondition, ByRef Condition2 As FormatCondition) As Boolean
+Private Function IsSameCondition(ByRef F1 As FormatCondition, ByRef F2 As FormatCondition) As Boolean
     Dim Operator(1 To 2)      As String '次の値に等しい、次の値の間etc
     Dim TextOperator(1 To 2)  As String 'Type=xlTextStringの時、次の値を含む、次の値で始まるetc
     Dim Text(1 To 2)          As String 'Type=xlTextStringの時の文字列
@@ -170,26 +137,25 @@ Private Function IsSameCondition(ByRef Condition1 As FormatCondition, ByRef Cond
     Dim Formula2_R1C1(1 To 2) As String '数式をR1C1タイプで設定
 
     IsSameCondition = False
+    If F1.Type <> F2.Type Then
+        Exit Function
+    End If
     
     'タイプによっては直接判定すると例外となる項目があるため例外を抑制して変数に設定
     On Error Resume Next
-    With Condition1
+    With F1
         Operator(1) = .Operator
         TextOperator(1) = .TextOperator
         Text(1) = .Text
         Formula1_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
         Formula2_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-'        Formula1Ex_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'        Formula2Ex_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
     End With
-    With Condition2
+    With F2
         Operator(2) = .Operator
         TextOperator(2) = .TextOperator
         Text(2) = .Text
         Formula1_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
         Formula2_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-'        Formula1Ex_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'        Formula2Ex_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
     End With
     On Error GoTo 0
     
@@ -210,25 +176,6 @@ Private Function IsSameCondition(ByRef Condition1 As FormatCondition, ByRef Cond
     End If
     
     IsSameCondition = True
-    
-'    '念のためF1が絶対参照、F2が相対参照なのでFormula_R1C1の中身が一致した時のために、
-'    '1つ右下のセルの相対参照の内容まで一致するか確認する →　不要
-'    On Error Resume Next
-'    With Condition1
-'        Formula1Ex_R1C1(1) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'        Formula2Ex_R1C1(1) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'    End With
-'    With Condition2
-'        Formula1Ex_R1C1(2) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'        Formula2Ex_R1C1(2) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo).Offset(1, 1))
-'    End With
-'    On Error GoTo 0
-'    If Formula1Ex_R1C1(1) <> Formula1Ex_R1C1(2) Then
-'        Exit Function
-'    End If
-'    If Formula2Ex_R1C1(1) <> Formula2Ex_R1C1(2) Then
-'        Exit Function
-'    End If
 End Function
 
 '*****************************************************************************
@@ -236,7 +183,7 @@ End Function
 '[引数] 比較対象のFormatConditionオブジェクト
 '[戻値] True:一致
 '*****************************************************************************
-Private Function IsSameFormat(ByRef Format1 As FormatCondition, ByRef Format2 As FormatCondition) As Boolean
+Private Function IsSameFormat(ByRef F1 As FormatCondition, ByRef F2 As FormatCondition) As Boolean
     Dim FontBold(1 To 2)      As String 'フォント太字
     Dim FontColor(1 To 2)     As String 'フォント色
     Dim InteriorColor(1 To 2) As String '塗りつぶし色
@@ -246,13 +193,13 @@ Private Function IsSameFormat(ByRef Format1 As FormatCondition, ByRef Format2 As
     
     '場合によっては直接判定すると例外となる項目があることを考慮して例外を抑制し変数に設定
     On Error Resume Next
-    With Format1
+    With F1
         FontBold(1) = .Font.Bold
         FontColor(1) = .Font.Color
         InteriorColor(1) = .Interior.Color
         NumberFormat(1) = .NumberFormat
     End With
-    With Format2
+    With F2
         FontBold(2) = .Font.Bold
         FontColor(2) = .Font.Color
         InteriorColor(2) = .Interior.Color
@@ -275,4 +222,90 @@ Private Function IsSameFormat(ByRef Format1 As FormatCondition, ByRef Format2 As
     
     IsSameFormat = True
 End Function
+
+'*****************************************************************************
+'[概要] Debug用のセル関数
+'[引数] objCell:条件付き書式の設定されたセル、n:FormatConditionsの何番目？
+'       InfoNo:個別の情報を表示したい時、s(i)のIndexを設定
+'[戻値] 例：Type:1 Operator:4 TextOperator:# Text:# Formula1:=0 Formula2:#  Formula1:=0 Formula2:# AppliesTo:A1:A20
+'*****************************************************************************
+Public Function GetFConditionStr(objCell As Range, ByVal n As Long, Optional ByVal InfoNo As Long = 0) As String
+    Dim objFCondition As Object
+    Set objFCondition = objCell.FormatConditions(n)
+        
+    Dim s(1 To 11)
+    Dim i As Long
+    For i = 1 To UBound(s)
+        s(i) = "#" 'エラーの時
+    Next
+    
+    On Error Resume Next
+    With objFCondition
+        s(1) = .Type
+        s(2) = TypeName(objFCondition)
+        s(3) = .Operator
+        s(4) = .TextOperator
+        s(5) = .Text
+        s(6) = .Formula1
+        s(7) = .Formula2
+        s(8) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+        s(9) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+        s(10) = .AppliesTo.AddressLocal(False, False)
+        s(11) = GetTopLeftCell(.AppliesTo).AddressLocal(False, False)
+    End With
+    On Error GoTo 0
+    
+    If InfoNo > 0 Then
+        GetFConditionStr = s(InfoNo)
+    Else
+        Dim strMsg As String
+        strMsg = "Type:{1} TypeName:{2} Operator:{3} TextOperator:{4} Text:{5} Formula1:{6} Formula2:{7}  Formula1:{8} Formula2:{9} AppliesTo:{10} TopLeftCell:{11}"
+        For i = 1 To UBound(s)
+            strMsg = Replace(strMsg, "{" & i & "}", s(i))
+        Next
+        GetFConditionStr = strMsg
+    End If
+End Function
+
+'*****************************************************************************
+'[概要] 領域が左上から並ぶようにソートする 例:E:F,B:B → B:B,E:F
+'[引数] 条件付き書式の適用範囲
+'[戻値] ソート後の適用範囲
+'*****************************************************************************
+Private Function SortAreas(ByRef objRange As Range) As Range
+    ReDim SortArray(1 To objRange.Areas.Count) As Currency
+    Dim i As Long
+    Dim j As Long
+    
+    'Sort対象の配列を作成
+    For i = 1 To objRange.Areas.Count
+        With objRange.Areas(i)
+            '上5桁は列番号、中7桁は行番号、下4桁はIndex
+            SortArray(i) = CCur(Format(.Column, "00000") & _
+                                Format(.Row, "0000000") & _
+                                Format(i, "0000"))
+        End With
+    Next
+    
+    'Sort
+    Dim Swap As Currency
+    For i = objRange.Areas.Count To 1 Step -1
+        For j = 1 To i - 1
+            If SortArray(j) > SortArray(j + 1) Then
+                Swap = SortArray(j)
+                SortArray(j) = SortArray(j + 1)
+                SortArray(j + 1) = Swap
+            End If
+        Next j
+    Next i
+    
+    '結果設定
+    j = Right(SortArray(1), 4) 'Index=下4桁
+    Set SortAreas = objRange.Areas(j)
+    For i = 2 To UBound(SortArray)
+        j = Right(SortArray(i), 4) 'Index=下4桁
+        Set SortAreas = Application.Union(SortAreas, objRange.Areas(j))
+    Next
+End Function
+
 
