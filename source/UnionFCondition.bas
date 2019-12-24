@@ -86,16 +86,18 @@ Private Function GetTopLeftCell(ByRef objRange As Range) As Range
     Dim objArea As Range
     Dim lngRow As Long
     Dim lngCol As Long
+    
+    '最大値を初期設定
     lngRow = Rows.Count
     lngCol = Columns.Count
     
     For Each objArea In objRange.Areas
-        With objArea.Cells(1)
+        With objArea.Cells(1)  '領域ごとの一番左上のセル
             lngRow = WorksheetFunction.Min(.Row, lngRow)
             lngCol = WorksheetFunction.Min(.Column, lngCol)
         End With
     Next
-    Set GetTopLeftCell = Cells(lngRow, lngCol)
+    Set GetTopLeftCell = objRange.Worksheet.Cells(lngRow, lngCol)
 End Function
 
 '*****************************************************************************
@@ -229,11 +231,11 @@ End Function
 '       InfoNo:個別の情報を表示したい時、s(i)のIndexを設定
 '[戻値] 例：Type:1 Operator:4 TextOperator:# Text:# Formula1:=0 Formula2:#  Formula1:=0 Formula2:# AppliesTo:A1:A20
 '*****************************************************************************
-Public Function GetFConditionStr(objCell As Range, ByVal n As Long, Optional ByVal InfoNo As Long = 0) As String
+Public Function GetFConditionInfo(objCell As Range, ByVal n As Long, Optional ByVal InfoNo As Long = 0) As String
     Dim objFCondition As Object
     Set objFCondition = objCell.FormatConditions(n)
         
-    Dim s(1 To 11)
+    Dim s(1 To 12)
     Dim i As Long
     For i = 1 To UBound(s)
         s(i) = "#" 'エラーの時
@@ -242,28 +244,29 @@ Public Function GetFConditionStr(objCell As Range, ByVal n As Long, Optional ByV
     On Error Resume Next
     With objFCondition
         s(1) = .Type
-        s(2) = TypeName(objFCondition)
-        s(3) = .Operator
-        s(4) = .TextOperator
-        s(5) = .Text
-        s(6) = .Formula1
-        s(7) = .Formula2
-        s(8) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-        s(9) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
-        s(10) = .AppliesTo.AddressLocal(False, False)
-        s(11) = GetTopLeftCell(.AppliesTo).AddressLocal(False, False)
+        s(2) = .Priority
+        s(3) = TypeName(objFCondition)
+        s(4) = .Operator
+        s(5) = .TextOperator
+        s(6) = .Text
+        s(7) = .Formula1
+        s(8) = .Formula2
+        s(9) = Application.ConvertFormula(.Formula1, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+        s(10) = Application.ConvertFormula(.Formula2, xlA1, xlR1C1, , GetTopLeftCell(.AppliesTo))
+        s(11) = .AppliesTo.AddressLocal(False, False)
+        s(12) = GetTopLeftCell(.AppliesTo).AddressLocal(False, False)
     End With
     On Error GoTo 0
     
     If InfoNo > 0 Then
-        GetFConditionStr = s(InfoNo)
+        GetFConditionInfo = s(InfoNo)
     Else
         Dim strMsg As String
-        strMsg = "Type:{1} TypeName:{2} Operator:{3} TextOperator:{4} Text:{5} Formula1:{6} Formula2:{7}  Formula1:{8} Formula2:{9} AppliesTo:{10} TopLeftCell:{11}"
+        strMsg = "Type:{1} Priority:{2} TypeName:{3} Operator:{4} TextOperator:{5} Text:{6} Formula1:{7} Formula2:{8}  Formula1:{9} Formula2:{10} AppliesTo:{11} TopLeftCell:{12}"
         For i = 1 To UBound(s)
             strMsg = Replace(strMsg, "{" & i & "}", s(i))
         Next
-        GetFConditionStr = strMsg
+        GetFConditionInfo = strMsg
     End If
 End Function
 
