@@ -78,29 +78,6 @@ Private Sub UnionFormatConditions(ByRef objWorksheet As Worksheet)
 End Sub
 
 '*****************************************************************************
-'[概要] 一番左上のセルを取得する
-'[引数] 条件付き書式の適用範囲
-'[戻値] 一番左上のセル
-'*****************************************************************************
-Private Function GetTopLeftCell(ByRef objRange As Range) As Range
-    Dim objArea As Range
-    Dim lngRow As Long
-    Dim lngCol As Long
-    
-    '最大値を初期設定
-    lngRow = Rows.Count
-    lngCol = Columns.Count
-    
-    For Each objArea In objRange.Areas
-        With objArea.Cells(1)  '領域ごとの一番左上のセル
-            lngRow = WorksheetFunction.Min(.Row, lngRow)
-            lngCol = WorksheetFunction.Min(.Column, lngCol)
-        End With
-    Next
-    Set GetTopLeftCell = objRange.Worksheet.Cells(lngRow, lngCol)
-End Function
-
-'*****************************************************************************
 '[概要] 条件および書式が一致するか判定
 '[引数] 比較対象のFormatConditionオブジェクト
 '[戻値] True:一致
@@ -178,6 +155,29 @@ Private Function IsSameCondition(ByRef F1 As FormatCondition, ByRef F2 As Format
     End If
     
     IsSameCondition = True
+End Function
+
+'*****************************************************************************
+'[概要] 一番左上のセルを取得する
+'[引数] 条件付き書式の適用範囲
+'[戻値] 一番左上のセル
+'*****************************************************************************
+Private Function GetTopLeftCell(ByRef objRange As Range) As Range
+    Dim objArea As Range
+    Dim lngRow As Long
+    Dim lngCol As Long
+    
+    '最大値を初期設定
+    lngRow = Rows.Count
+    lngCol = Columns.Count
+    
+    For Each objArea In objRange.Areas
+        With objArea.Cells(1)  '領域ごとの一番左上のセル
+            lngRow = WorksheetFunction.Min(.Row, lngRow)
+            lngCol = WorksheetFunction.Min(.Column, lngCol)
+        End With
+    Next
+    Set GetTopLeftCell = objRange.Worksheet.Cells(lngRow, lngCol)
 End Function
 
 '*****************************************************************************
